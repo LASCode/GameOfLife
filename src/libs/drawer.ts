@@ -1,5 +1,234 @@
 import {valueInRange} from "../utils/valueInRange";
 
+export class Drawer1 {
+    rootNode!: HTMLDivElement;
+    canvasMeshNode!:  HTMLCanvasElement;
+    canvasMeshCtx!: CanvasRenderingContext2D;
+
+    width!: number;
+    height!: number;
+    scale: number = 1;
+    cellSize: number = 50;
+    offSetX: number = 0;
+    offSetY: number = 0;
+    callbacks: Record<string, (...args: any[]) => void> = {};
+
+    cursorPointCoords: [number | null, number | null] = [null, null];
+    mouseMoveStartValues: [number, number] = [0, 0];
+    mouseMovePrevValues: [number, number] = [0, 0];
+
+    constructor() {}
+
+    init(container: HTMLDivElement) {
+        this.rootNode = container;
+        this.width = container.getBoundingClientRect().width;
+        this.height = container.getBoundingClientRect().height;
+        this.canvasMeshNode = document.createElement('canvas');
+        this.canvasMeshCtx = this.canvasMeshNode.getContext('2d') as CanvasRenderingContext2D;
+        this.rootNode.appendChild(this.canvasMeshNode);
+
+
+        this.initCallbacks();
+        this.rootNode.addEventListener('mousedown', this.callbacks._move_mouseDown);
+        this.rootNode.addEventListener('wheel', this.callbacks._wheelScaling);
+
+        // this.offSetX = (this.width / 2) / this.scale;
+        // this.offSetY = (this.height / 2) / this.scale;
+
+        this.resize();
+        this.redraw();
+    }
+
+    redraw() {
+        this.redrawMesh();
+        this.drawToolbar();
+        this.drawCentralDot();
+    }
+    resize() {
+        const { height, width } = this.getContainerSize();
+        this.width = width;
+        this.height = height;
+        [this.canvasMeshNode].forEach((el) => {
+            el.height = height;
+            el.width = width;
+        })
+        this.redraw();
+    }
+
+    private drawLines() {
+        const { xLength, yLength } = this.getXYLength();
+
+        const fromX = +((this.offSetX / (this.cellSize * this.scale)) * -1).toFixed(0);
+        const toX = fromX < 0 ? xLength + fromX : xLength + fromX;
+
+        const fromY = +((this.offSetY / (this.cellSize * this.scale)) * -1).toFixed(0);
+        const toY = fromY < 0 ? yLength + fromY : yLength + fromY;
+
+        // for (let yi = fromY; yi < toY + 1; yi++) {
+        //     for (let xi = fromX; xi < toX + 1; xi++) {
+        //         this.canvasMeshCtx.beginPath()
+        //         this.canvasMeshCtx.lineWidth = 1;
+        //         this.canvasMeshCtx.strokeStyle = 'rgba(0,0,0,0.5)';
+        //         this.canvasMeshCtx.moveTo(((this.cellSize * this.scale) * xi) - 0.5 + this.offSetX, 0);
+        //         this.canvasMeshCtx.lineTo(((this.cellSize * this.scale) * xi) - 0.5 + this.offSetX, this.height);
+        //         this.canvasMeshCtx.stroke();
+        //
+        //         this.canvasMeshCtx.beginPath()
+        //         this.canvasMeshCtx.lineWidth = 1;
+        //         this.canvasMeshCtx.strokeStyle = 'rgba(255,0,0,0.13)';
+        //         this.canvasMeshCtx.moveTo(0, ((this.cellSize * this.scale) * yi) - 0.5 + this.offSetY);
+        //         this.canvasMeshCtx.lineTo(this.width, ((this.cellSize * this.scale) * yi) - 0.5 + this.offSetY);
+        //         this.canvasMeshCtx.stroke();
+        //     }
+        // }
+        for (let xi = fromX; xi < toX + 1; xi++) {
+            this.canvasMeshCtx.beginPath()
+            this.canvasMeshCtx.lineWidth = 1;
+            if (xi === 0) {
+                this.canvasMeshCtx.strokeStyle = 'rgba(100,255,0,1)';
+            } else {
+                this.canvasMeshCtx.strokeStyle = (xi % 5 === 0) ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)';
+            }
+            this.canvasMeshCtx.moveTo(((this.cellSize * this.scale) * xi) - 0.5 + this.offSetX, 0);
+            this.canvasMeshCtx.lineTo(((this.cellSize * this.scale) * xi) - 0.5 + this.offSetX, this.height);
+            this.canvasMeshCtx.stroke();
+        }
+
+        for (let yi = fromY; yi < toY + 1; yi++) {
+            this.canvasMeshCtx.beginPath()
+            this.canvasMeshCtx.lineWidth = 1;
+            if (yi === 0) {
+                this.canvasMeshCtx.strokeStyle = 'rgba(100,255,0,1)';
+            } else {
+                this.canvasMeshCtx.strokeStyle = (yi % 5 === 0) ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)';
+            }
+            this.canvasMeshCtx.moveTo(0, ((this.cellSize * this.scale) * yi) - 0.5 + this.offSetY);
+            this.canvasMeshCtx.lineTo(this.width, ((this.cellSize * this.scale) * yi) - 0.5 + this.offSetY);
+            this.canvasMeshCtx.stroke();
+        }
+
+
+
+    }
+    private clearMesh() {
+        this.canvasMeshCtx.clearRect(0, 0, this.width, this.height);
+    }
+    private redrawMesh() {
+        this.clearMesh();
+        this.drawLines();
+    }
+    private getXYLength() {
+        return ({
+            xLength: this.width / (this.cellSize * this.scale),
+            yLength: this.height / (this.cellSize * this.scale)
+        })
+    }
+    private getContainerSize() {
+        const { width, height } = this.rootNode.getBoundingClientRect();
+        return ({ width, height });
+    }
+
+    private initCallbacks() {
+        this.callbacks._resize = this.resize.bind(this);
+        this.callbacks._wheelScaling = this._wheelScaling.bind(this);
+
+        this.callbacks._move_mouseDown = this._move_mouseDown.bind(this);
+        this.callbacks._move_mouseUp = this._move_mouseUp.bind(this);
+        this.callbacks._move_mouseMove = this._move_mouseMove.bind(this);
+    }
+    private _move_mouseMove(event: MouseEvent) {
+        const [startX, startY] = this.mouseMoveStartValues;
+        const [prevX, prevY] = this.mouseMovePrevValues;
+
+        const calculatedOffSetX = event.offsetX < 0 ? event.offsetX + startX : event.offsetX - startX;
+        const calculatedOffSetY = event.offsetY < 0 ? event.offsetY + startY : event.offsetY - startY;
+
+        this.offSetX = calculatedOffSetX + (this.offSetX - prevX);
+        this.offSetY = calculatedOffSetY + (this.offSetY - prevY);
+
+        this.mouseMovePrevValues = [calculatedOffSetX, calculatedOffSetY];
+        this.redraw();
+    }
+    private _move_mouseDown(event: MouseEvent) {
+        this.mouseMovePrevValues = [event.offsetX, event.offsetY];
+        this.mouseMoveStartValues = [0, 0];
+        this.rootNode.addEventListener('mousemove', this.callbacks._move_mouseMove);
+        this.rootNode.addEventListener('mouseup', this.callbacks._move_mouseUp);
+    }
+    private _move_mouseUp() {
+        this.mouseMovePrevValues = [0, 0];
+        this.mouseMoveStartValues = [0, 0];
+        this.rootNode.removeEventListener('mousemove', this.callbacks._move_mouseMove);
+        this.rootNode.removeEventListener('mouseup', this.callbacks._move_mouseUp);
+    }
+    test_b = [0, 0];
+    private _wheelScaling(event: WheelEvent) {
+        const x = event.offsetX - this.offSetX;
+        const y = event.offsetY - this.offSetY;
+        // this.offSetX = x + ((this.width / 2) / this.scale);
+        // this.offSetY = y + ((this.height / 2) / this.scale);
+        this.scale = valueInRange(0.01, 2, +(this.scale + ((event.deltaY * -1) / 5000)).toFixed(3));
+        this.offSetX = (event.offsetX - this.offSetX) / this.scale;
+        this.offSetY = (event.offsetY - this.offSetY) / this.scale;
+
+        console.log((event.offsetX - this.offSetX) / this.scale, (event.offsetY - this.offSetY) / this.scale);
+        this.redraw();
+    }
+
+    private convertToLocalCoords({ x: rawX, y: rawY }: {x: number, y: number}) {
+        const cellSize = this.cellSize * this.scale;
+        const xCoordsWithOffSet = rawX - this.offSetX;
+        const yCoordsWithOffSet = rawY - this.offSetY;
+
+        return ({
+            x: Math.floor(xCoordsWithOffSet / cellSize),
+            y: Math.floor(yCoordsWithOffSet / cellSize),
+        })
+    }
+    private convertToGlobalCoords({ x: rawX, y: rawY }: {x: number, y: number}) {
+        const cellSize = this.cellSize * this.scale;
+
+        return ({
+            x: Math.floor(rawX * cellSize),
+            y: Math.floor(rawY * cellSize),
+        })
+    }
+    private normalizeGlobalCoords({ x: rawX, y: rawY }: {x: number, y: number}) {
+        return this.convertToGlobalCoords(this.convertToLocalCoords({x: rawX, y: rawY}))
+    }
+
+    private drawToolbar(): void {
+        document.getElementById('test_123231')?.remove();
+        const html = `
+            <div id="test_123231" style="position: absolute; right: 0; top: 0; background: rgba(255, 255, 255, 0.1);">
+                <div>offsetX: ${this.offSetX}</div>
+                <div>offsetY: ${this.offSetY}</div>
+                <div>scale: ${this.scale}</div>
+            </div>
+        `
+        this.rootNode.insertAdjacentHTML('beforeend', html);
+    }
+    private drawCentralDot(): void {
+        document.getElementById('test_dot')?.remove();
+        const html = `
+            <div 
+            id="test_dot" 
+            style="
+                position: absolute; 
+                height: 5px;
+                width: 5px;
+                left: 50%; 
+                top: 50%; 
+                transform: translate(-50%, -50%);
+                background: rgba(0, 0, 0, 1);
+            "
+            ></div>
+        `
+        this.rootNode.insertAdjacentHTML('beforeend', html);
+    }
+}
+
+
 export class Drawer {
     rootNode!: HTMLDivElement;
     canvasNode!:  HTMLCanvasElement;
@@ -15,10 +244,17 @@ export class Drawer {
 
     width!: number;
     height!: number;
-    offSetX: number = 0;
-    offSetY: number = 0;
     scale: number = 1;
     cellSize: number = 50;
+    offSetX: number = 0;
+    offSetY: number = 0;
+    widthHalf: number = 0;
+    heightHalf: number = 0;
+
+    // set offSetX(val: number) {this._offSetX = (((this.width/2) - this._offSetX) / this.scale) + val}
+    // get offSetX(): number {return this._offSetX}
+    // set offSetY(val: number) {this._offSetY = (((this.width/2) - this._offSetY) / this.scale) + val}
+    // get offSetY(): number {return this._offSetY}
 
     callbacks: Record<string, (...args: any[]) => void> = {};
     cursorPointCoords: [number | null, number | null] = [null, null];
@@ -56,6 +292,10 @@ export class Drawer {
         this.rootNode.addEventListener('wheel', this.callbacks._wheelScaling);
         this.rootNode.addEventListener('click', this.callbacks._cellClick);
 
+        this.widthHalf = (this.width / 2) / this.scale;
+        this.heightHalf = (this.height / 2) / this.scale;
+        this.offSetX = this.widthHalf;
+        this.offSetY = this.heightHalf;
         this._resize();
         this.redraw();
     }
@@ -64,6 +304,7 @@ export class Drawer {
         this.redrawRects();
         this.redrawMesh();
         this.drawToolbar();
+        this.drawCentralDot();
     }
 
     private drawLines() {
@@ -179,7 +420,14 @@ export class Drawer {
         this.redrawRects();
     }
     private _wheelScaling(event: WheelEvent) {
-        this.scale = valueInRange(0.01, 2, +(this.scale + ((event.deltaY * -1) / 5000)).toFixed(3))
+        this.scale = valueInRange(0.01, 2, +(this.scale + ((event.deltaY * -1) / 5000)).toFixed(3));
+        this.widthHalf = (this.width / 2) / this.scale;
+        this.heightHalf = (this.height / 2) / this.scale;
+        // this.offSetX = this.offSetX - (this.widthHalf);
+        // this.offSetY = this.offSetY - (this.heightHalf);
+        console.log((((this.width/2) - this.offSetX) / this.scale));
+        // this.offSetX = ((this.widthHalf) / this.scale);
+        // this.offSetY = (((this.height/2) - this.offSetY) / this.scale)
         this.redraw();
     }
     private _cellClick(event: MouseEvent) {
@@ -400,6 +648,29 @@ export class Drawer {
         }
 
     }
+    private getHalfSizes() {
+        return ({
+            halfX: this.widthHalf,
+            halfY: this.heightHalf,
+        })
+    }
+    private updateWidthHalf() {
+        this.widthHalf = (this.width / 2) / this.scale;
+        this.heightHalf = (this.height / 2) / this.scale;
+    }
+    private normalizeXCoords(val: number) {
+        return (((this.width/2) - this.offSetX) / this.scale) + val;
+    }
+    private normalizeYCoords(val: number) {
+        return (((this.height/2) - this.offSetX) / this.scale) + val;
+    }
+    private setOffSetX(coords: number) {
+        this.offSetX = (((this.width/2) - this.offSetX) / this.scale) + coords;
+    }
+    private setOffSetY(coords: number) {
+        this.offSetY = (((this.width/2) - this.offSetY) / this.scale) + coords;
+    }
+
 
 
 
@@ -421,8 +692,28 @@ export class Drawer {
             <div id="test_123231" style="position: absolute; right: 0; top: 0; background: rgba(255, 255, 255, 0.1);">
                 <div>offsetX: ${this.offSetX}</div>
                 <div>offsetY: ${this.offSetY}</div>
+                <div>widthHalf: ${(this.widthHalf).toFixed(2)}</div>
+                <div>heightHalf: ${(this.heightHalf).toFixed(2)}</div>
                 <div>scale: ${this.scale}</div>
             </div>
+        `
+        this.rootNode.insertAdjacentHTML('beforeend', html);
+    }
+    private drawCentralDot(): void {
+        document.getElementById('test_dot')?.remove();
+        const html = `
+            <div 
+            id="test_dot" 
+            style="
+                position: absolute; 
+                height: 5px;
+                width: 5px;
+                left: 50%; 
+                top: 50%; 
+                transform: translate(-50%, -50%);
+                background: rgba(0, 0, 0, 1);
+            "
+            ></div>
         `
         this.rootNode.insertAdjacentHTML('beforeend', html);
     }
